@@ -1,0 +1,17 @@
+# Binaries for programs
+brokerApp
+authAPP
+loggerApp
+frontApp
+
+
+.env
+
+.DS_Store
+
+
+**/db-data/
+docker-compose.override.yml
+
+
+.vscode/
