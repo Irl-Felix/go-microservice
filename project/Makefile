@@ -1,6 +1,6 @@
 FRONT_END_BINARY=frontApp
 BROKER_BINARY=brokerApp
-AUTH_BINARY=authAPP
+AUTH_BINARY=authApp
 LOGGER_BINARY=loggerAPP
 MAIL_BINARY=mailApp
 
@@ -43,7 +43,7 @@ build_logger:
 
 build_auth:
 	@echo "Building auth binary..."
-	cd ../authentication-service && env GOOS=linux CGO_ENABLED=0 go build -o ${AUTH_BINARY} ./cmd/api
+	cd ../authentication-service && env GOOS=linux CGO_ENABLED=0 go build -o authApp ./cmd/api
 	@echo "Done!"
 
 ## build_front: builds the front end binary

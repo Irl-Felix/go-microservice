@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 )
 
@@ -16,7 +17,7 @@ type requestPayload struct {
 
 type MailPayload struct {
 	From    string `json:"email"`
-	To      string `json:"password"`
+	To      string `json:"to"`
 	Subject string `json:"subject"`
 	Message string `json:"message"`
 }
@@ -160,10 +161,12 @@ func (app *Config) sendMail(w http.ResponseWriter, msg MailPayload) {
 		_ = app.errorJSON(w, err)
 		return
 	}
+
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusAccepted {
-		_ = app.errorJSON(w, errors.New("error calling mail service"))
+		err = app.errorJSON(w, errors.New("error calling mail service"))
+		log.Println(err)
 		return
 	}
 	var payload jsonResponse
