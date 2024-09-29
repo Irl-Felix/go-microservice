@@ -3,6 +3,8 @@ brokerApp
 authAPP
 loggerApp
 frontApp
+mailAPP
+listenerApp
 
 
 .env
