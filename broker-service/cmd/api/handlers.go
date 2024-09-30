@@ -1,14 +1,15 @@
 package main
 
 import (
+	// "broker/event"
+	"broker/event"
 	"bytes"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 )
 
-type requestPayload struct {
+type RequestPayload struct {
 	Action string      `json:"action"`
 	Auth   AuthPayload `json:"auth,omitempty"`
 	Log    LogPayload  `json:"log,omitempty"`
@@ -16,7 +17,7 @@ type requestPayload struct {
 }
 
 type MailPayload struct {
-	From    string `json:"email"`
+	From    string `json:"from"`
 	To      string `json:"to"`
 	Subject string `json:"subject"`
 	Message string `json:"message"`
@@ -43,7 +44,7 @@ func (app *Config) Broker(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Config) HandleSubmission(w http.ResponseWriter, r *http.Request) {
-	var requestPayload requestPayload
+	var requestPayload RequestPayload
 
 	err := app.readJSON(w, r, &requestPayload)
 	if err != nil {
@@ -54,7 +55,7 @@ func (app *Config) HandleSubmission(w http.ResponseWriter, r *http.Request) {
 	case "auth":
 		app.authenticate(w, requestPayload.Auth)
 	case "log":
-		app.logItem(w, requestPayload.Log)
+		app.logEventViaRabbit(w, requestPayload.Log)
 	case "mail":
 		app.sendMail(w, requestPayload.Mail)
 	default:
@@ -63,37 +64,38 @@ func (app *Config) HandleSubmission(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *Config) logItem(w http.ResponseWriter, entry LogPayload) {
-	jsonData, _ := json.MarshalIndent(entry, "", "\t")
+// Now just for REFERENCE --> Dont need this code for app
+// func (app *Config) logItem(w http.ResponseWriter, entry LogPayload) {
+// 	jsonData, _ := json.MarshalIndent(entry, "", "\t")
 
-	logServiceURL := "http://logger-service/log"
+// 	logServiceURL := "http://logger-service/log"
 
-	request, err := http.NewRequest("POST", logServiceURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		_ = app.errorJSON(w, err)
-		return
-	}
+// 	request, err := http.NewRequest("POST", logServiceURL, bytes.NewBuffer(jsonData))
+// 	if err != nil {
+// 		_ = app.errorJSON(w, err)
+// 		return
+// 	}
 
-	request.Header.Set("Content-Type", "application/json")
+// 	request.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		_ = app.errorJSON(w, err)
-		return
-	}
-	defer response.Body.Close()
+// 	client := &http.Client{}
+// 	response, err := client.Do(request)
+// 	if err != nil {
+// 		_ = app.errorJSON(w, err)
+// 		return
+// 	}
+// 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusAccepted {
-		_ = app.errorJSON(w, err)
-		return
-	}
-	var payload jsonResponse
-	payload.Error = false
-	payload.Message = "logged"
+// 	if response.StatusCode != http.StatusAccepted {
+// 		_ = app.errorJSON(w, err)
+// 		return
+// 	}
+// 	var payload jsonResponse
+// 	payload.Error = false
+// 	payload.Message = "logged"
 
-	_ = app.writeJSON(w, http.StatusAccepted, payload)
-}
+// 	_ = app.writeJSON(w, http.StatusAccepted, payload)
+// }
 
 func (app *Config) authenticate(w http.ResponseWriter, a AuthPayload) {
 	//
@@ -165,12 +167,42 @@ func (app *Config) sendMail(w http.ResponseWriter, msg MailPayload) {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusAccepted {
-		err = app.errorJSON(w, errors.New("error calling mail service"))
-		log.Println(err)
+		_ = app.errorJSON(w, errors.New("error calling mail service"))
 		return
 	}
 	var payload jsonResponse
 	payload.Error = false
 	payload.Message = "Message sent to " + msg.To
 	_ = app.writeJSON(w, http.StatusAccepted, payload)
+}
+
+func (app *Config) logEventViaRabbit(w http.ResponseWriter, l LogPayload) {
+	err := app.pushToQueue(l.Name, l.Data)
+	if err != nil {
+		_ = app.errorJSON(w, err)
+		return
+	}
+	var payload jsonResponse
+	payload.Error = false
+	payload.Message = "logged via RabbitMQ"
+
+	_ = app.writeJSON(w, http.StatusAccepted, payload)
+}
+
+func (app *Config) pushToQueue(name, msg string) error {
+	emitter, err := event.NewEventEmitter(app.Rabbit)
+	if err != nil {
+		return err
+	}
+	payload := LogPayload{
+		Name: name,
+		Data: msg,
+	}
+
+	j, _ := json.MarshalIndent(&payload, "", "\t")
+	err = emitter.Push(string(j), "log.INFO")
+	if err != nil {
+		return err
+	}
+	return nil
 }
